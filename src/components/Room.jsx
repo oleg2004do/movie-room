@@ -6,7 +6,7 @@ import {
 export default function Room({ user, onLeave }) {
   const [isMicOn, setIsMicOn] = useState(false);
   const [isCamOn, setIsCamOn] = useState(false);
-  const [facingMode, setFacingMode] = useState('user'); // 'user' (фронтальна) або 'environment' (основна на телефоні)
+  const [facingMode, setFacingMode] = useState('user'); // 'user' (фронтальна) або 'environment' (основна)
   const [localStream, setLocalStream] = useState(null);
   const [screenStream, setScreenStream] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -14,6 +14,12 @@ export default function Room({ user, onLeave }) {
 
   const localVideoRef = useRef(null);
   const screenVideoRef = useRef(null);
+
+  // Перевірка, чи підтримує пристрій і браузер демонстрацію екрана
+  const canShareScreen =
+    typeof navigator !== 'undefined' &&
+    !!navigator.mediaDevices &&
+    typeof navigator.mediaDevices.getDisplayMedia === 'function';
 
   // Прив'язка потоку камери до <video>
   useEffect(() => {
@@ -37,23 +43,18 @@ export default function Room({ user, onLeave }) {
     };
   }, [localStream, screenStream]);
 
-  // Увімкнення / вимкнення камери (працює і на ПК, і на телефоні)
+  // Увімкнення / вимкнення камери
   const toggleCamera = async (customFacingMode = facingMode) => {
-    // Перевірка захищеного з'єднання (HTTPS або localhost)
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      alert(
-        'Браузер заблокував доступ до камери! Для роботи камери на телефоні чи по мережі відкрий сайт через HTTPS-тунель (наприклад, npx localtunnel --port 5173).'
-      );
+      alert('Браузер заблокував доступ до камери. Відкрий сайт у звичайному браузері по HTTPS.');
       return;
     }
 
     if (isCamOn && customFacingMode === facingMode) {
-      // Вимикаємо відео-трек
       localStream?.getVideoTracks().forEach((track) => track.stop());
       setIsCamOn(false);
     } else {
       try {
-        // Зупиняємо старий відеотрек перед перемиканням камери
         localStream?.getVideoTracks().forEach((track) => track.stop());
 
         const stream = await navigator.mediaDevices.getUserMedia({
@@ -66,12 +67,12 @@ export default function Room({ user, onLeave }) {
         setIsCamOn(true);
       } catch (err) {
         console.error('Помилка доступу до камери:', err);
-        alert('Не вдалося отримати доступ до камери. Перевір дозволи у браузері.');
+        alert('Не вдалося отримати доступ до камери. Перевір дозволи у налаштуваннях браузера.');
       }
     }
   };
 
-  // Перемикання фронтальної / тильної камери на телефоні
+  // Перемикання фронтальної / основної камери на телефоні
   const switchPhoneCamera = () => {
     const nextMode = facingMode === 'user' ? 'environment' : 'user';
     toggleCamera(nextMode);
@@ -80,7 +81,7 @@ export default function Room({ user, onLeave }) {
   // Увімкнення / вимкнення мікрофона
   const toggleMic = async () => {
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      alert('Мікрофон доступний лише через HTTPS або localhost.');
+      alert('Мікрофон доступний лише у захищеному браузері по HTTPS.');
       return;
     }
 
@@ -102,7 +103,7 @@ export default function Room({ user, onLeave }) {
     }
   };
 
-  // Показ екрана
+  // Демонстрація екрана (працює на ПК/ноутбуці)
   const toggleScreenShare = async () => {
     if (screenStream) {
       screenStream.getTracks().forEach((track) => track.stop());
@@ -110,12 +111,7 @@ export default function Room({ user, onLeave }) {
       return;
     }
 
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
-      alert(
-        'Трансляція екрана доступна лише через HTTPS (або localhost) і підтримується переважно на ПК/ноутбуці.'
-      );
-      return;
-    }
+    if (!canShareScreen) return;
 
     try {
       const stream = await navigator.mediaDevices.getDisplayMedia({
@@ -155,16 +151,24 @@ export default function Room({ user, onLeave }) {
             <div className="text-center p-6 max-w-md space-y-3">
               <MonitorUp className="w-12 h-12 text-slate-600 mx-auto" />
               <h3 className="text-lg font-bold text-white">Ніхто зараз не транслює екран</h3>
-              <p className="text-xs text-slate-400">
-                Ти чи Христя можете у будь-який момент запустити фільм чи відео з ютубу.
-              </p>
-              <button
-                onClick={toggleScreenShare}
-                className="mt-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium px-4 py-2.5 rounded-xl inline-flex items-center space-x-2 shadow-lg shadow-indigo-600/30 transition-all"
-              >
-                <MonitorUp className="w-4 h-4" />
-                <span>Поділитися своїм екраном</span>
-              </button>
+              {canShareScreen ? (
+                <>
+                  <p className="text-xs text-slate-400">
+                    Ти чи Христя можете у будь-який момент запустити фільм чи відео з ютубу.
+                  </p>
+                  <button
+                    onClick={toggleScreenShare}
+                    className="mt-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium px-4 py-2.5 rounded-xl inline-flex items-center space-x-2 shadow-lg shadow-indigo-600/30 transition-all"
+                  >
+                    <MonitorUp className="w-4 h-4" />
+                    <span>Поділитися своїм екраном</span>
+                  </button>
+                </>
+              ) : (
+                <p className="text-xs text-slate-400">
+                  Трансляцію екрана можна запустити з ноутбука або ПК. З телефона зручно дивитися стрім і вмикати камеру.
+                </p>
+              )}
             </div>
           )}
         </div>
@@ -203,7 +207,7 @@ export default function Room({ user, onLeave }) {
               <button
                 onClick={switchPhoneCamera}
                 className="p-3 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 hover:bg-slate-800 transition-colors"
-                title="Перемкнути камеру (фронтальна / тильна)"
+                title="Перемкнути камеру (фронтальна / основна)"
               >
                 <RefreshCw className="w-5 h-5" />
               </button>
@@ -211,13 +215,15 @@ export default function Room({ user, onLeave }) {
           </div>
 
           <div className="flex items-center space-x-2">
-            <button
-              onClick={toggleScreenShare}
-              className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium px-4 py-3 rounded-xl flex items-center space-x-2 shadow-lg shadow-indigo-600/20"
-            >
-              <MonitorUp className="w-4 h-4" />
-              <span>{screenStream ? 'Зупинити показ' : 'Поділитися екраном'}</span>
-            </button>
+            {canShareScreen && (
+              <button
+                onClick={toggleScreenShare}
+                className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium px-4 py-3 rounded-xl flex items-center space-x-2 shadow-lg shadow-indigo-600/20"
+              >
+                <MonitorUp className="w-4 h-4" />
+                <span>{screenStream ? 'Зупинити показ' : 'Поділитися екраном'}</span>
+              </button>
+            )}
 
             <button
               onClick={onLeave}
@@ -230,7 +236,7 @@ export default function Room({ user, onLeave }) {
         </div>
       </div>
 
-      {/* ПРАВА ЧАСТИНА: Камери учасників + Чат (зайвий блок аватарки знизу прибрано) */}
+      {/* ПРАВА ЧАСТИНА: Камери учасників + Чат */}
       <div className="w-full lg:w-80 flex flex-col gap-4">
         
         {/* Блок камер учасників */}
@@ -267,7 +273,7 @@ export default function Room({ user, onLeave }) {
             </div>
           </div>
 
-          {/* Картка другого учасника (Христя) */}
+          {/* Картка другого учасника */}
           <div className="relative bg-slate-950 border border-slate-800 rounded-xl aspect-video overflow-hidden flex items-center justify-center">
             <div className="w-16 h-16 rounded-full bg-slate-800/80 flex items-center justify-center text-sm font-bold text-slate-400">
               Х
